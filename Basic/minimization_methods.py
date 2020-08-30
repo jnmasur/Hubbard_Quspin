@@ -103,11 +103,12 @@ def objective(x, J_target, params, graph=False, x0=None):
 
     J_expec = expec.J_expec(psi_t, times, hop_left, hop_right, lat, cycles)
 
-    J_expec_spectrum = spectrum(J_expec, delta)
-    J_target_spectrum = spectrum(J_target, params.target_delta)
+    # J_expec_spectrum = spectrum(J_expec, delta)
+    # J_target_spectrum = spectrum(J_target, params.target_delta)
 
-    difference = J_target_spectrum - J_expec_spectrum
+    # difference = J_target_spectrum - J_expec_spectrum
 
+    difference = J_target - J_expec
     fval = trapz(difference ** 2)
 
     # just some graphing stuff
@@ -127,6 +128,8 @@ def objective(x, J_target, params, graph=False, x0=None):
                                                                                         params.field, params.F0, cycles,
                                                                                         n_steps, params.pbc)
         plt.savefig("./MinimizedPlots/CurrentComparison" + parameters + '.pdf')
+
+    print("Fval =", fval, "for x =", x)
 
     return fval
 

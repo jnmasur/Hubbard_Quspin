@@ -1,27 +1,10 @@
-from __future__ import print_function, division
-import os
-import sys
-
-"""Open MP and MKL should speed up the time required to run these simulations!"""
-# threads = sys.argv[1]
-threads = 6
-os.environ['OMP_NUM_THREADS'] = '{}'.format(threads)
-os.environ['MKL_NUM_THREADS'] = '{}'.format(threads)
-import numpy as np  # general math functions
-from time import time  # tool for calculating computation time
-from scipy.optimize import minimize
-from old_minimization_methods import objective, J_gradient, Parameters
-
-
-sys.path.append('../')
-import psutil
-# note cpu_count for logical=False returns the wrong number for multi-socket CPUs.
-print("logical cores available {}".format(psutil.cpu_count(logical=True)))
-t_init = time()
-np.__config__.show()
+from minimization_methods import objective, Parameters, minimize_wrapper
+from tools import parameter_instantiate as hhg
+import numpy as np
+from time import time
 
 """Hubbard model Parameters"""
-L = 6 # system size
+L = 6  # system size
 N_up = L // 2 + L % 2  # number of fermions with spin up
 N_down = L // 2  # number of fermions with spin down
 N = N_up + N_down  # number of particles
@@ -32,28 +15,36 @@ pbc = True
 field = 32.9  # field angular frequency THz
 F0 = 10  # Field amplitude MV/cm
 
-"""delta U/a for finding derivatives"""
-delta_U = .001
-delta_a = .001
-
 """Initial guesses for optimization parameters"""
-U = 1.3 * t0
-a = 4.5
+initial_U = 1.05 * t0
+initial_a = 4.05
 
+# initial guess point
+x0 = np.array([initial_U, initial_a])
+
+# target parameters
+target_U = 1 * t0
+target_a = 4
+
+lat = hhg(field, N_up, N_down, L, 0, target_U, t0, F0=F0, a=target_a, pbc=pbc)
+cycles = 10
+n_steps = 2000
+start = 0
+stop = cycles / lat.freq
+target_delta = np.linspace(start, stop, num=n_steps, endpoint=True, retstep=True)[1]
 # add all parameters to the class and create the basis
-params = Parameters(L, N_up, N_down, t0, field, F0, delta_U, delta_a, pbc)
+params = Parameters(L, N_up, N_down, t0, field, F0, target_delta, pbc)
 params.set_basis()
 
-"""Initial parameters for optimization"""
-x0 = np.array([U, a])
+parameters = f'-{params.nx}sites-{params.t}t0-{target_U}U-{target_a}a-{params.field}field-' \
+             f'{params.F0}amplitude-{10}cycles-{2000}steps-{params.pbc}pbc'
 
-"""The target current"""
-J_target = np.load('./Data/J_expec-6sites-0.52t0-0.52U-0.1delta_U-4a-0.001delta_a-32.9field-10amplitude-10cycles-2000steps-Truepbc.npy')
+# target current
+J_target = np.load('./Data/J_expec' + parameters + '.npy')
 
 ti = time()
 """The actual minimization call"""
-# z = minimize(objective, x0, args=(J_target, params), jac=J_gradient, bounds=((0,10),(0,10)), options={'disp': True})
-z = minimize(objective, x0, args=(J_target, params), bounds=((0,10),(0,10)), options={'disp': True})
+z = minimize_wrapper((objective, x0, J_target, params, ((0,10*params.t),(0,10))))
 
 print(z.x)
 
