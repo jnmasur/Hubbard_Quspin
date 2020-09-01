@@ -98,17 +98,20 @@ def objective(x, J_target, params, graph=False, x0=None):
     psi_0 = np.squeeze(psi_0)
     print("ground state calculated, energy is {:.2f}".format(E[0]))
 
+    # evolve the system
     psi_t = evolution.evolve(psi_0, 0.0, times, evolve_psi, f_params=(onsite, hop_left, hop_right, lat, cycles))
     psi_t = np.squeeze(psi_t)
-
+    # get the expectation value of J
     J_expec = expec.J_expec(psi_t, times, hop_left, hop_right, lat, cycles)
 
-    # J_expec_spectrum = spectrum(J_expec, delta)
-    # J_target_spectrum = spectrum(J_target, params.target_delta)
+    # get power spectrum of the target and simulated currents and take the logarithm
+    J_expec_spectrum = np.log10(spectrum(J_expec, delta))
+    J_target_spectrum = np.log10(spectrum(J_target, params.target_delta))
 
-    # difference = J_target_spectrum - J_expec_spectrum
+    difference = J_target_spectrum - J_expec_spectrum
 
-    difference = J_target - J_expec
+    # difference = J_target - J_expec
+
     fval = trapz(difference ** 2)
 
     # just some graphing stuff
