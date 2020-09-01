@@ -263,7 +263,7 @@ def global_minimize_single_thread(x0, fun, J_target, params, minimizer=minimize)
 
         # [U-rU/2, U+rU/2)
         else:
-            x0[0] = (rU  * (np.random.rand() - .5)) + best_U
+            x0[0] = (rU * (np.random.rand() - .5)) + best_U
 
         # [a_lower , a_lower + ra)
         if best_a - a_lower < ra:
@@ -278,6 +278,7 @@ def global_minimize_single_thread(x0, fun, J_target, params, minimizer=minimize)
             x0[1] = (ra * (np.random.rand() - .5)) + best_a
 
     return OptimizeResult(x=best_x, fun=best_fval)
+
 
 # simply used to call minimize
 def minimize_wrapper(args):
