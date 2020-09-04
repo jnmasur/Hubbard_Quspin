@@ -73,14 +73,15 @@ def objective(x, J_target, params, graph=False, x0=None):
     stop = cycles / lat.freq
     times, delta = np.linspace(start, stop, num=n_steps, endpoint=True, retstep=True)
 
+    no_checks = dict(check_pcon=False, check_symm=False, check_herm=False)
+
     int_list = [[1.0, i, i] for i in range(params.nx)]
     static_Hamiltonian_list = [
         ["n|n", int_list]  # onsite interaction
     ]
     # n_j,up n_j,down
-    onsite = hamiltonian(static_Hamiltonian_list, [], basis=params.basis)
+    onsite = hamiltonian(static_Hamiltonian_list, [], basis=params.basis, **no_checks)
 
-    no_checks = dict(check_pcon=False, check_symm=False, check_herm=False)
     hop = [[1.0, i, i + 1] for i in range(params.nx - 1)]
     if lat.pbc:
         hop.append([1.0, params.nx - 1, 0])
@@ -93,10 +94,10 @@ def objective(x, J_target, params, graph=False, x0=None):
     H = -lat.t * (hop_left + hop_right) + lat.U * onsite
 
     """build ground state"""
-    print("calculating ground state")
+    # print("calculating ground state")
     E, psi_0 = H.eigsh(k=1, which='SA')
     psi_0 = np.squeeze(psi_0)
-    print("ground state calculated, energy is {:.2f}".format(E[0]))
+    # print("ground state calculated, energy is {:.2f}".format(E[0]))
 
     # evolve the system
     psi_t = evolution.evolve(psi_0, 0.0, times, evolve_psi, f_params=(onsite, hop_left, hop_right, lat, cycles))
@@ -105,8 +106,11 @@ def objective(x, J_target, params, graph=False, x0=None):
     J_expec = expec.J_expec(psi_t, times, hop_left, hop_right, lat, cycles)
 
     # get power spectrum of the target and simulated currents and take the logarithm
-    J_expec_spectrum = np.log10(spectrum(J_expec, delta))
-    J_target_spectrum = np.log10(spectrum(J_target, params.target_delta))
+    # J_expec_spectrum = np.log10(spectrum(J_expec, delta))
+    # J_target_spectrum = np.log10(spectrum(J_target, params.target_delta))
+
+    J_expec_spectrum = spectrum(J_expec, delta)
+    J_target_spectrum = spectrum(J_target, params.target_delta)
 
     difference = J_target_spectrum - J_expec_spectrum
 
@@ -130,9 +134,9 @@ def objective(x, J_target, params, graph=False, x0=None):
         parameters += '-{}sites-{}t0-{}field-{}amplitude-{}cycles-{}steps-{}pbc'.format(params.nx, params.t,
                                                                                         params.field, params.F0, cycles,
                                                                                         n_steps, params.pbc)
-        plt.savefig("./MinimizedPlots/CurrentComparison" + parameters + '.pdf')
+        # plt.savefig("./MinimizedPlots/CurrentComparison" + parameters + '.pdf')
 
-    print("Fval =", fval, "for x =", x)
+    # print("Fval =", fval, "for x =", x)
 
     return fval
 
@@ -202,7 +206,7 @@ def randomize_parameters(best_x, rU, ra, bounds, seed):
         a = ra * np.random.rand() + a_lower
 
     # [a_upper - ra, a_upper)
-    elif a_upper - best_a > ra:
+    elif a_upper - best_a < ra:
         a = ra * np.random.rand() + (a_upper - ra)
 
     # [a-ra/2,a+ra/2)
@@ -283,4 +287,52 @@ def global_minimize_single_thread(x0, fun, J_target, params, minimizer=minimize)
 # simply used to call minimize
 def minimize_wrapper(args):
     fun, x0, J_target, params, bounds = args
-    return minimize(fun, x0, args=(J_target, params), bounds=bounds)
+    return minimize(fun, x0, args=(J_target, params), bounds=bounds, options={'ftol':1e-10})
+
+def current_expectation(x, params):
+    U, a = x
+
+    # contains all important variables
+    lat = hhg(field=params.field, nup=params.nup, ndown=params.ndown, nx=params.nx, ny=0, U=U, t=params.t,
+              F0=params.F0, a=a, pbc=params.pbc)
+
+    # gets times to evaluate at
+    cycles = 10
+    n_steps = 2000
+    start = 0
+    stop = cycles / lat.freq
+    times, delta = np.linspace(start, stop, num=n_steps, endpoint=True, retstep=True)
+
+    no_checks = dict(check_pcon=False, check_symm=False, check_herm=False)
+
+    int_list = [[1.0, i, i] for i in range(params.nx)]
+    static_Hamiltonian_list = [
+        ["n|n", int_list]  # onsite interaction
+    ]
+    # n_j,up n_j,down
+    onsite = hamiltonian(static_Hamiltonian_list, [], basis=params.basis, **no_checks)
+
+    hop = [[1.0, i, i + 1] for i in range(params.nx - 1)]
+    if lat.pbc:
+        hop.append([1.0, params.nx - 1, 0])
+
+    # c^dag_j,sigma c_j+1,sigma
+    hop_left = hamiltonian([["+-|", hop], ["|+-", hop]], [], basis=params.basis, **no_checks)
+    # c^dag_j+1,sigma c_j,sigma
+    hop_right = hop_left.getH()
+
+    H = -lat.t * (hop_left + hop_right) + lat.U * onsite
+
+    """build ground state"""
+    # print("calculating ground state")
+    E, psi_0 = H.eigsh(k=1, which='SA')
+    psi_0 = np.squeeze(psi_0)
+    # print("ground state calculated, energy is {:.2f}".format(E[0]))
+
+    # evolve the system
+    psi_t = evolution.evolve(psi_0, 0.0, times, evolve_psi, f_params=(onsite, hop_left, hop_right, lat, cycles))
+    psi_t = np.squeeze(psi_t)
+    # get the expectation value of J
+    J_expec = expec.J_expec(psi_t, times, hop_left, hop_right, lat, cycles)
+
+    return J_expec
