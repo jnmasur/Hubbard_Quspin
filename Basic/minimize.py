@@ -47,6 +47,8 @@ ti = time()
 z = minimize_wrapper((objective, x0, J_target, params, ((0,10*params.t),(0,10))))
 
 print(z.x)
+print(z.fun)
+print(z.message)
 
 objective(z.x,J_target,params,graph=True)
 

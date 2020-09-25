@@ -43,8 +43,12 @@ class Parameters:
         self.basis = None
 
     def set_basis(self):
-        self.basis = spinful_fermion_basis_1d(self.nx, Nf=(self.nup, self.ndown))
-
+        """
+        This method sets the basis for our system, we can use some symmetries of the system
+        to reduce the size of the Hilbert Space
+        """
+        # self.basis = spinful_fermion_basis_1d(self.nx, Nf=(self.nup, self.ndown))
+        self.basis = spinful_fermion_basis_1d(self.nx, Nf=(self.nup, self.ndown), sblock=1, kblock=1)
 
 def objective(x, J_target, params, graph=False, x0=None):
     """
@@ -167,7 +171,7 @@ def get_seeds(size):
     return np.fromiter(seeds, np.uint32, size)
 
 
-def randomize_parameters(best_x, rU, ra, bounds, seed):
+def randomize_parameters(best_x, rU, ra, bounds, seed=None):
     """
     Used to randomize parameters to be passed into minimize for our global minimizer.
     :param best_x: the current best x
@@ -186,8 +190,9 @@ def randomize_parameters(best_x, rU, ra, bounds, seed):
     U_lower, U_upper = U_bounds
     a_lower, a_upper = a_bounds
 
-    # seed the generator
-    np.random.seed(seed)
+    # seed the generator if it is not None
+    if seed is not None:
+        np.random.seed(seed)
 
     # [U_lower, U_lower + rU)
     if best_U - U_lower < rU:
@@ -336,3 +341,19 @@ def current_expectation(x, params):
     J_expec = expec.J_expec(psi_t, times, hop_left, hop_right, lat, cycles)
 
     return J_expec
+
+# def recursive_minimize(fun, new_bounds, U_radius, a_radius, J_target, params):
+#     U_bounds, a_bounds = new_bounds
+#     lower_U, upper_U = U_bounds
+#     lower_a, upper_a = a_bounds
+#
+#     # base case we check if the bounds are within the radius
+#     if upper_U - lower_U <= U_radius and upper_a - lower_a <= a_radius:
+#         x0 = np.array([(upper_U - lower_U) / 2, (upper_a - lower_a) / 2])
+#         res = minimize(fun, x0, args=(J_target, params), options={'ftol': 1e-10})
+#         return res
+#     else:
+#         mid_U = (upper_U - lower_U) / 2
+#         mid_a = (upper_a - lower_a) / 2
+#         left_bounds = ((lower_U, mid_U), (lower))
+#         left_res = recursive_minimize(fun)

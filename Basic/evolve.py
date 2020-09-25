@@ -19,8 +19,8 @@ def evolve_psi(current_time, psi, onsite, hop_left, hop_right, lat, cycles, phi_
     :return: -i * H|psi>
     """
 
-    print("Simulation Progress: |" + "#" * int(current_time * lat.freq) + " " * (10 - int(current_time * lat.freq))
-          + "|" + "{:.2f}".format(current_time * lat.freq * 10) + "%", end="\r")
+    # print("Simulation Progress: |" + "#" * int(current_time * lat.freq) + " " * (10 - int(current_time * lat.freq))
+    #       + "|" + "{:.2f}".format(current_time * lat.freq * 10) + "%", end="\r")
 
     phi = phi_func(current_time, lat, cycles)
 

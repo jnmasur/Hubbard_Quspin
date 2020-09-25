@@ -1,4 +1,4 @@
-from minimization_methods import objective, Parameters, randomize_parameters, get_seeds, minimize_wrapper
+from minimization_methods import *
 from tools import parameter_instantiate as hhg
 import numpy as np
 from multiprocessing import Pool
@@ -17,8 +17,8 @@ field = 32.9  # field angular frequency THz
 F0 = 10  # Field amplitude MV/cm
 
 """Initial guesses for optimization parameters"""
-initial_U = 2 * t0
-initial_a = 3
+initial_U = 1.5 * t0
+initial_a = 4
 
 # initial guess point
 x0 = np.array([initial_U, initial_a])
@@ -44,8 +44,8 @@ parameters = f'-{params.nx}sites-{params.t}t0-{target_U}U-{target_a}a-{params.fi
 J_target = np.load('./Data/J_expec' + parameters + '.npy')
 
 # radius of range for randomized parameters
-rU = .4 * params.t
-ra = .4
+rU = 1 * params.t
+ra = 1
 
 # bounds for variables
 U_upper = 10 * params.t
@@ -54,30 +54,43 @@ a_upper = 10
 a_lower = 0
 bounds = ((U_lower, U_upper), (a_lower, a_upper))
 
+num_threads = 25
+
 if __name__ == '__main__':
 
+    ti = time()
     # get the first value of the function
     fval = objective(x0, J_target, params)
     best_fval = fval
     best_x = x0
 
     niter = 0
-    while best_fval > 1e-6 and niter < 20:
+    while best_fval > 1e-9 and niter < 20:
         niter += 1
 
         # create an iterator of parameters to be passed into minimize with randomized x0
         iter_params = ((objective, randomize_parameters(best_x, rU, ra, bounds, seed), J_target, params, bounds)
-                       for seed in get_seeds(100))
+                       for seed in get_seeds(num_threads))
 
-        with Pool() as pool:
+        with Pool(num_threads) as pool:
 
             # minimize with different initial parameters then compare to find the best x0
             for res in pool.imap_unordered(minimize_wrapper, iter_params):
+                print("Result function value", res.fun)
+                print("Best function value", best_fval)
+                print("Result x value", res.x)
+                print("Best x value", best_x)
                 if res.fun < best_fval:
                     best_fval = res.fun
                     best_x = res.x
 
-pass
+            pool.close()
+
+    print("Final Parameters:", best_x)
+    print("Cost function", best_fval)
+    print("Total time for pseudo-basinhopping:", time() - ti)
+    objective(best_x, J_target, params, graph=True)
+
 # initial_Us = []
 # initial_as = []
 # runtimes = []

@@ -1,9 +1,7 @@
 ##########################################################
 # Very basic Hubbard model simulation. Should be used as #
-# a base to build on with e.g. interfaces, S.O. coupling #
-# tracking and low-rank approximations. Should be fairly #
-# self-explanatory, and is based on the Quspin package.  #
-# See:  http://weinbe58.github.io/QuSpin/index.html      #
+# a base to build on with e.g. interfaces,
+# n/index.html      #
 ##########################################################
 
 from quspin.operators import hamiltonian  # operators
@@ -19,7 +17,7 @@ from evolve import evolve_psi
 t_init = time()
 
 """Hubbard model Parameters"""
-L = 6  # system size
+L = 12  # system size
 N_up = L // 2 + L % 2  # number of fermions with spin up
 N_down = L // 2  # number of fermions with spin down
 N = N_up + N_down  # number of particles
@@ -46,7 +44,7 @@ times, delta = np.linspace(start, stop, num=n_steps, endpoint=True, retstep=True
 parameters = f'-{L}sites-{t0}t0-{U}U-{a}a-{field}field-{F0}amplitude-{cycles}cycles-{n_steps}steps-{pbc}pbc'
 
 """create basis"""
-basis = spinful_fermion_basis_1d(L, Nf=(N_up, N_down))
+basis = spinful_fermion_basis_1d(L, Nf=(N_up, N_down), sblock=1, kblock=1)
 
 """Create static part of hamiltonian - the interaction b/w electrons"""
 int_list = [[1.0, i, i] for i in range(L)]
