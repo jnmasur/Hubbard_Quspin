@@ -27,14 +27,8 @@ x0 = np.array([initial_U, initial_a])
 target_U = 1 * t0
 target_a = 4
 
-lat = hhg(field, N_up, N_down, L, 0, target_U, t0, F0=F0, a=target_a, pbc=pbc)
-cycles = 10
-n_steps = 2000
-start = 0
-stop = cycles / lat.freq
-target_delta = np.linspace(start, stop, num=n_steps, endpoint=True, retstep=True)[1]
 # add all parameters to the class and create the basis
-params = Parameters(L, N_up, N_down, t0, field, F0, target_delta, pbc)
+params = Parameters(L, N_up, N_down, t0, field, F0, pbc)
 params.set_basis()
 
 parameters = f'-{params.nx}sites-{params.t}t0-{target_U}U-{target_a}a-{params.field}field-' \

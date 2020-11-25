@@ -3,7 +3,6 @@ from quspin.basis import spinful_fermion_basis_1d  # Hilbert space basis
 import quspin.tools.evolution as evolution
 import numpy as np  # general math functions
 from matplotlib import pyplot as plt
-from scipy.integrate import trapz
 from scipy.optimize import OptimizeResult, minimize
 from scipy import signal
 import expectations as expec
@@ -19,7 +18,7 @@ def spectrum(current, delta):
     :return: the power spectrum of the current
     """
     at = np.gradient(current, delta)
-    return spectrum_welch(at, delta)[1]
+    return spectrum_welch(at, delta)
 
 
 def spectrum_welch(at, delta):
@@ -31,7 +30,7 @@ def spectrum_welch(at, delta):
 
 # note U and a are the optimization parameters, so they are not contained in this class
 class Parameters:
-    def __init__(self, nx, nup, ndown, t0, field, F0, target_delta, pbc):
+    def __init__(self, nx, nup, ndown, t0, field, F0, pbc):
         self.nx = nx
         self.nup = nup
         self.ndown = ndown
@@ -39,32 +38,37 @@ class Parameters:
         self.pbc = pbc
         self.field = field
         self.F0 = F0
-        self.target_delta = target_delta
         self.basis = None
 
-    def set_basis(self):
+    def set_basis(self, symmetry=True):
         """
         This method sets the basis for our system, we can use some symmetries of the system
         to reduce the size of the Hilbert Space
         """
-        # self.basis = spinful_fermion_basis_1d(self.nx, Nf=(self.nup, self.ndown))
-        self.basis = spinful_fermion_basis_1d(self.nx, Nf=(self.nup, self.ndown), sblock=1, kblock=1)
+        if symmetry:
+            self.basis = spinful_fermion_basis_1d(self.nx, Nf=(self.nup, self.ndown), sblock=1, kblock=1)
+        else:
+            self.basis = spinful_fermion_basis_1d(self.nx, Nf=(self.nup, self.ndown))
 
-def objective(x, J_target, params, graph=False, x0=None):
+
+def objective(x, J_target, params, graph=False, fname=None):
     """
     Our objective function that we want to minimize:
     E(U,a) = int(JT - <J>)^2
     :param x: input array [U,a]
-    :param J_target: the target current we would like to fit to
+    :param J_target: tuple of (frequencies, spectrum)
     :param params: an instance of Parameters class
     :param graph: if True, the target and calculated current will be graphed together
-    :param x0: the initial x input into the minimization function that would be used to save the graph
+    :param fname: name of the file to save the graph to
     :return: The cost of the function
     """
 
     # optimization parameters
     oU = x[0]
     oa = x[1]
+
+    # unpack J_target
+    target_freqs, target_spectrum = J_target
 
     # contains all important variables
     lat = hhg(field=params.field, nup=params.nup, ndown=params.ndown, nx=params.nx, ny=0, U=oU, t=params.t,
@@ -98,29 +102,18 @@ def objective(x, J_target, params, graph=False, x0=None):
     H = -lat.t * (hop_left + hop_right) + lat.U * onsite
 
     """build ground state"""
-    # print("calculating ground state")
     E, psi_0 = H.eigsh(k=1, which='SA')
     psi_0 = np.squeeze(psi_0)
-    # print("ground state calculated, energy is {:.2f}".format(E[0]))
 
-    # evolve the system
+    """evolve the system"""
     psi_t = evolution.evolve(psi_0, 0.0, times, evolve_psi, f_params=(onsite, hop_left, hop_right, lat, cycles))
     psi_t = np.squeeze(psi_t)
     # get the expectation value of J
     J_expec = expec.J_expec(psi_t, times, hop_left, hop_right, lat, cycles)
 
-    # get power spectrum of the target and simulated currents and take the logarithm
-    # J_expec_spectrum = np.log10(spectrum(J_expec, delta))
-    # J_target_spectrum = np.log10(spectrum(J_target, params.target_delta))
+    expec_freqs, J_expec_spectrum = spectrum(J_expec, delta)
 
-    J_expec_spectrum = spectrum(J_expec, delta)
-    J_target_spectrum = spectrum(J_target, params.target_delta)
-
-    difference = J_target_spectrum - J_expec_spectrum
-
-    # difference = J_target - J_expec
-
-    fval = trapz(difference ** 2)
+    fval = np.linalg.norm(np.log10(target_spectrum) - np.log10(J_expec_spectrum))
 
     # just some graphing stuff
     if graph:
@@ -130,19 +123,23 @@ def objective(x, J_target, params, graph=False, x0=None):
         plt.xlabel("Time")
         plt.ylabel("Current")
         plt.title("Target Current vs Best Fit Current")
+        if fname is not None:
+            plt.savefig(fname)
         plt.show()
-        parameters = ""
-        if x0 is not None:
-            parameters += "-{:.4f}U_initial-{:.4f}a_initial".format(x0[0], x0[1])
-        parameters += "-{:.4f}U_final-{:.4f}a_final".format(x[0], x[1])
-        parameters += '-{}sites-{}t0-{}field-{}amplitude-{}cycles-{}steps-{}pbc'.format(params.nx, params.t,
-                                                                                        params.field, params.F0, cycles,
-                                                                                        n_steps, params.pbc)
-        # plt.savefig("./MinimizedPlots/CurrentComparison" + parameters + '.pdf')
 
     # print("Fval =", fval, "for x =", x)
 
     return fval
+
+
+def objective_w_spectrum(target, res):
+    """
+    Calculates cost given both spectra
+    """
+    tfreqs, tspectrum = target
+    rfreqs, rspectrum = res
+
+    return np.linalg.norm(np.log10(tspectrum) - np.log10(rspectrum))
 
 
 def get_seeds(size):
@@ -292,7 +289,8 @@ def global_minimize_single_thread(x0, fun, J_target, params, minimizer=minimize)
 # simply used to call minimize
 def minimize_wrapper(args):
     fun, x0, J_target, params, bounds = args
-    return minimize(fun, x0, args=(J_target, params), bounds=bounds, options={'ftol':1e-10})
+    return minimize(fun, x0, args=(J_target, params), bounds=bounds, options={'ftol': 1e-10})
+
 
 def current_expectation(x, params):
     U, a = x
@@ -342,18 +340,36 @@ def current_expectation(x, params):
 
     return J_expec
 
-# def recursive_minimize(fun, new_bounds, U_radius, a_radius, J_target, params):
-#     U_bounds, a_bounds = new_bounds
-#     lower_U, upper_U = U_bounds
-#     lower_a, upper_a = a_bounds
-#
-#     # base case we check if the bounds are within the radius
-#     if upper_U - lower_U <= U_radius and upper_a - lower_a <= a_radius:
-#         x0 = np.array([(upper_U - lower_U) / 2, (upper_a - lower_a) / 2])
-#         res = minimize(fun, x0, args=(J_target, params), options={'ftol': 1e-10})
-#         return res
-#     else:
-#         mid_U = (upper_U - lower_U) / 2
-#         mid_a = (upper_a - lower_a) / 2
-#         left_bounds = ((lower_U, mid_U), (lower))
-#         left_res = recursive_minimize(fun)
+
+def current_expectation_power_spectrum(x, params):
+    """
+    Returns the power spectrum of a current based on the parameters and x
+    :param x: U, a
+    :param params: all parameters
+    :return: power spectrum of J
+    """
+    U, a = x
+
+    lat = hhg(field=params.field, nup=params.nup, ndown=params.ndown, nx=params.nx, ny=0, U=U, t=params.t,
+              F0=params.F0, a=a, pbc=params.pbc)
+
+    cycles = 10
+    n_steps = 2000
+    start = 0
+    stop = cycles / lat.freq
+    delta = np.linspace(start, stop, num=n_steps, endpoint=True, retstep=True)[1]
+
+    J = current_expectation(x, params)
+
+    return spectrum(J, delta)
+
+
+class Result:
+    """
+    Simple class just to be used to return an optimized result
+    """
+    def __init__(self, x, fun, t):
+        self.x = x
+        self.fun = fun
+        self.time = t
+

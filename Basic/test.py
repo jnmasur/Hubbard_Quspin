@@ -1,38 +1,39 @@
 import numpy as np
 
-t = .52
-U_lower = 0
-U_upper = 10 * t
-a_lower = 0
-a_upper = 10
+threads_per_x0 = 11
+num_x0s = 10
 
-rU = .4 * t
-ra = .4
+t0 = .52
+rU = 2*t0
+ra = 2
 
-test_arr = np.array([0,1])
+parameters = "-{}threadsperx0-{}numx0s-{}rU-{}ra".format(threads_per_x0, num_x0s, rU, ra)
 
-for best_U in [.1, 3, 5.1]:
-    # [U_lower, U_lower + rU*t)
-    if best_U - U_lower < rU:
-        print(rU * test_arr)
+target_Us = np.load('./GlobalMinimizeData/target_Us'+parameters+'.npy')
+target_Us = np.reshape(target_Us, (5, 5))
+target_as = np.load('./GlobalMinimizeData/target_as'+parameters+'.npy')
+target_as = np.reshape(target_as, (5, 5))
+runtimes = np.load('./GlobalMinimizeData/runtimes'+parameters+'.npy')
+tot_time = sum(runtimes) / 3600
+runtimes = np.reshape(runtimes, (5, 5))
+final_costs = np.load('./GlobalMinimizeData/final_costs'+parameters+'.npy')
+final_costs = np.reshape(final_costs, (5, 5))
+final_Us = np.load('./GlobalMinimizeData/final_Us'+parameters+'.npy')
+final_Us = np.reshape(final_Us, (5, 5))
+final_as = np.load('./GlobalMinimizeData/final_as'+parameters+'.npy')
+final_as = np.reshape(final_as, (5, 5))
+U_percent_error = 100 * abs(final_Us - target_Us) / target_Us
+a_percent_error = 100 * abs(final_as - target_as) / target_as
 
-    # [U_upper - rU * t, U_upper)
-    elif U_upper - best_U < rU:
-        print(rU * test_arr + (U_upper - rU))
+avg_U_err = np.mean(U_percent_error)
+avg_a_error = np.mean(a_percent_error)
 
-    # [U-rU/2, U+rU/2)
-    else:
-        print((rU * (test_arr - .5)) + best_U)
+U_correct = sum([1 for x in U_percent_error.flatten() if x <= 10])
+a_correct = sum([1 for x in a_percent_error.flatten() if x <= 10])
 
-for best_a in [.2, 5, 9.8]:
-    # [a_lower , a_lower + ra)
-    if best_a - a_lower < ra:
-        print(ra * test_arr)
+print("U correct:", U_correct)
+print("a correct:", a_correct)
 
-    # [a_upper - ra, a_upper)
-    elif a_upper - best_a < ra:
-        print(ra * test_arr + (a_upper - ra))
+print("Average U error:", avg_U_err)
+print("Average a error:", avg_a_error)
 
-    # [a-ra/2,a+ra/2)
-    else:
-        print((ra * (test_arr - .5)) + best_a)
