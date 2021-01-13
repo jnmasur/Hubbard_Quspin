@@ -117,8 +117,8 @@ def objective(x, J_target, params, graph=False, fname=None):
 
     # just some graphing stuff
     if graph:
-        plt.plot(times, J_expec, color='red', label='$\\langle\\hat{J}(t)\\rangle$')
-        plt.plot(times, J_target, color='blue', linestyle='dashed', label='$J^{T}(t)$')
+        plt.plot(J_expec_spectrum, color='red', label='$\\langle\\hat{J}(t)\\rangle$')
+        plt.plot(target_spectrum, color='blue', linestyle='dashed', label='$J^{T}(t)$')
         plt.legend(loc='upper left')
         plt.xlabel("Time")
         plt.ylabel("Current")

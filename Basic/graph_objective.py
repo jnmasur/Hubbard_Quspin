@@ -209,7 +209,8 @@ def slice_spectra(spectra, cutoff, parameters):
         cutdex = np.argmax(freqs > cutoff)
         spect = spect[:cutdex]
         freqs = freqs[:cutdex]
-        zeroindex = np.argmin(spect > 1e-20)
+        # zeroindex = np.argmin(spect > 1e-20)
+        zeroindex = find_zero(spect, 1e-20)
         spect = spect[zeroindex:]
         freqs = freqs[zeroindex:]
         new_spectra.append((freqs, spect))
@@ -218,6 +219,19 @@ def slice_spectra(spectra, cutoff, parameters):
     np.save('./Spectra/cutoffSpectra'+spectrum_parameters+'.npy', new_spectra)
     return new_spectra, zeroindex, cutdex
 
+
+def find_zero(spectra, minimum):
+    """
+    Finds last occurrence less than minimum
+    :param spectra: spectra we want to cut
+    :param minimum: minimum value we will accept
+    :return: the last occurrence less than minimum, if there are none, returns np.inf
+    """
+    zeroindex = np.inf
+    for i in range(len(spectra)):
+        if spectra[i] < minimum:
+            zeroindex = i
+    return zeroindex
 
 target_U_over_t0 = 5
 target_a = 5
