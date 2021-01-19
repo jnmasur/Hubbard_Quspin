@@ -132,14 +132,19 @@ def objective(x, J_target, params, graph=False, fname=None):
     return fval
 
 
-def objective_w_spectrum(target, res):
+def objective_w_spectrum(target_and_res):
     """
     Calculates cost given both spectra
     """
-    tfreqs, tspectrum = target
-    rfreqs, rspectrum = res
-
-    return np.linalg.norm(np.log10(tspectrum) - np.log10(rspectrum))
+    target, res = target_and_res
+    min_val = 1e-20
+    indx = np.where((target > min_val) & (res > min_val))[0]
+    if len(indx) > 10:
+        target /= target.max()
+        res /= res.max()
+        return np.linalg.norm(np.log10(target[indx]) - np.log10(res[indx]))
+    else:
+        return np.nan
 
 
 def get_seeds(size):

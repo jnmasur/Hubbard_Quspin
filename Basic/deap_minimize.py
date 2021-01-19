@@ -88,7 +88,7 @@ def repopulator(spop, popsize, container, clone_func, mut_func):
     """
     Populate new_pop with individuals of spop and their mutants, so that there
     are popsize individuals in new_pop
-    :param spop: population containing t best individuals from an iteration
+    :param spop: population containing the best individuals from an iteration
     :param popsize: number of total individuals we want in the population
     :param container: the container for the individuals
     :param clone_func: function that performs cloning (see cloner)
@@ -113,13 +113,14 @@ def repopulator(spop, popsize, container, clone_func, mut_func):
     return new_pop
 
 
+# create fitness and individual that will have a fitness
 creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
 creator.create("Individual", list, fitness=creator.FitnessMin)
 
+# define a bunch of functions for the algorithm
 toolbox = base.Toolbox()
 toolbox.register("individual", init_individual, creator.Individual)
 toolbox.register("population", tools.initRepeat, list, toolbox.individual, n=num_threads)
-
 toolbox.register("evaluate", evaluator, J=J_target, p=params)  # parameter: x (individual)
 toolbox.register("mutate", mutator)  # parameters: individual, low, up, indpb, seed(optional)
 toolbox.register("mate", tools.cxTwoPoint)
@@ -128,6 +129,7 @@ toolbox.register("clone", cloner, container=toolbox.Individual)
 toolbox.register("repopulate", popsize=num_threads, container=creator.Individual, clone_func=toolbox.clone,
                  mut_func=toolbox.mutate)
 
+"""Actual start of algorithm"""
 pop = toolbox.population()
 hof = tools.HallOfFame(10)
 
@@ -148,9 +150,16 @@ for gen in range(NGEN):
         toolbox.mate(child1, child2)
         del child1.fitness.values
         del child2.fitness.values
+        pop.append(child1)
+        pop.append(child2)
 
+    # find all invalid fitnesses, remove them from pop, add to invalid_pop
+    invalid_pop = []
+    for i in range(len(pop)):
+        if not pop[i].fitness.valid:
+            ind = pop.pop(i)
+            invalid_pop.append(ind)
     # evaluate all individuals with invalid fitness
-    invalid_pop = [ind for ind in pop if not ind.fitness.valid]
     with Pool() as pool:
         invalid_fitnesses = pool.map(toolbox.evaluate, invalid_pop)
         for i in range(len(invalid_pop)):

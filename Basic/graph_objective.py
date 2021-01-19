@@ -1,7 +1,7 @@
 from minimization_methods import *
 from tools import parameter_instantiate as hhg
 import numpy as np
-from multiprocessing import cpu_count, Pool
+from multiprocessing import Pool
 from time import time
 from warnings import warn
 from matplotlib import pyplot as plt
@@ -82,54 +82,65 @@ def get_spectra(params, x_vals, parameters):
         results = np.array(results)
         print(results.shape)
 
-        new_results = []
+        # scale frequencies in terms of omega0
+        scaled_results = []
         for pair in results:
             freqs, spect = pair
             freqs = freqs / lat.freq
-            new_results.append((freqs, spect))
-        new_results = np.array(new_results)
-        print(new_results.shape)
-        np.save("./Spectra/spectra" + spectrum_parameters + ".npy", new_results)
+            scaled_results.append((freqs, spect))
+        scaled_results = np.array(scaled_results)
+        print(scaled_results.shape)
+        np.save("./Spectra/spectra" + spectrum_parameters + ".npy", scaled_results)
 
-        return results
+        return scaled_results
 
 
-def get_cost(params, target_x, x_vals, parameters, spectra=None, zeroindex=None, cutdex=None):
+def slice_spectra(spectra, parameters, min_cut, max_cut):
     """
-    Given a target_x and a grid (x_vals) find the cost for each point in the grid and save it
-    :param spectra: an array of spectra
-    :return: the costs over the grid for the fixed target
+    Slices spectra between min_cut and max_cut which are numbers in terms of the driving
+    frequency.
+    :return: zipped frequencies and spectra and indices for cutting
     """
 
+    new_spectra = []
+    cut_indices = []
+    for freqs, spect in spectra:
+        min_indx = np.searchsorted(freqs, min_cut)
+        max_indx = np.searchsorted(freqs, max_cut)
+        spect = spect[min_indx:max_indx]
+        freqs = freqs[min_indx:max_indx]
+        new_spectra.append((freqs, spect))
+        cut_indices.append((min_indx, max_indx))
+
+    spectrum_parameters = parameters[parameters.index('-sites'):]
+    np.save('./Spectra/cutoffSpectra' + spectrum_parameters + '.npy', new_spectra)
+    np.save('./Spectra/CutIndices' + spectrum_parameters + '.npy', cut_indices)
+
+    return np.array(new_spectra), np.array(cut_indices)
+
+
+def get_cost(params, target_x, spectra, cut_indices):
     target_freqs, target_current = current_expectation_power_spectrum(target_x, params)
+    min_indx, max_indx = cut_indices[0]
+    target_current = target_current[min_indx:max_indx]
 
-    if spectra is not None:
-        if __name__ == "__main__":
-            if zeroindex is not None and cutdex is not None:
-                data_points = (((target_freqs[zeroindex:cutdex], target_current[zeroindex:cutdex]), res) for res in
-                               spectra)
-            else:
-                data_points = (((target_freqs, target_current), res) for res in spectra)
-            with Pool(100) as pool:
-                costs = pool.starmap(objective_w_spectrum, data_points)
-            costs = np.array(costs)
-            np.save("./Data/CostData" + parameters + ".npy", costs)
-
-            return costs
-
-    else:
-        data_points = ((np.array(point), target_current, params) for point in x_vals)
-        if __name__ == "__main__":
-            # this saves the costs for plotting
-            with Pool(100) as pool:
-                costs = pool.starmap(objective, data_points)
-            costs = np.array(costs)
-            np.save("./CostData/costs" + parameters + ".npy", costs)
-
-            return costs
+    costs = np.array([objective_w_spectrum((target_current, spec)) for _, spec in spectra])
+    return costs
 
 
-def plot_cost(costs, parameters, params, target_x, U_vals, a_vals, type='2d', add_title=False, parameters2=None):
+def similarity_comparison(spectra):
+    with Pool(100) as pool:
+        similarity = [
+            list(pool.map(objective_w_spectrum, ((spec1, spec2) for _, spec1 in spectra))) for _, spec2 in spectra
+        ]
+    plt.imshow(similarity, origin=True)
+    plt.colorbar()
+    plt.show()
+    plt.savefig("./Cost/SimilarityComparison")
+    return np.array(similarity)
+
+
+def plot_cost(costs, parameters, params, target_x, U_vals, a_vals, type='2d', add_title=False):
     target_U, target_a = target_x
     if costs is None:
         costs = np.load("./CostData/Costs" + parameters + ".npy")
@@ -149,10 +160,7 @@ def plot_cost(costs, parameters, params, target_x, U_vals, a_vals, type='2d', ad
         if add_title:
             title = "Cost for U = {}t_0 and a = {}".format(target_U / params.t, target_a)
             plt.title(title)
-        if parameters2 is not None:
-            plt.savefig('./CostData/plot' + parameters + parameters2 + '.png')
-        else:
-            plt.savefig('./CostData/plot' + parameters + '.png')
+        plt.savefig('./CostData/plot' + parameters + '.png')
         # plt.show()
         plt.close()
 
@@ -176,62 +184,24 @@ def plot_spectra(params, first_x, second_x, outfile):
     second_freqs, second_spectrum = current_expectation_power_spectrum(second_x, params)
 
     first_freqs, second_freqs = first_freqs / lat.freq, second_freqs / lat.freq
+    # first_spectrum /= first_spectrum.max()
+    # second_spectrum /= second_spectrum.max()
 
     fig, ax = plt.subplots()
-    ax.semilogy(first_freqs, first_spectrum, label="$U = {} \cdot t_0, a = {}$".format(first_x[0]/params.t, first_x[1]),
+    ax.semilogy(first_freqs, first_spectrum,
+                label="$U = {} \cdot t_0, a = {}$".format(first_x[0] / params.t, first_x[1]),
                 color="blue")
-    ax.semilogy(second_freqs, second_spectrum, label="$U = {} \cdot t_0, a = {}$".format(second_x[0]/params.t,
+    ax.semilogy(second_freqs, second_spectrum, label="$U = {} \cdot t_0, a = {}$".format(second_x[0] / params.t,
                                                                                          second_x[1]), color="orange")
     ax.set_xlabel("Harmonic Order")
     ax.set_ylabel("Power")
-    ax.set_xlim((0, 50))
+    # ax.set_xlim((0, 50))
     for x in range(1, 50, 2):
         ax.axvline(x, linestyle="dashed", color="grey")
     ax.legend(loc="upper right")
     plt.savefig(outfile)
     plt.show()
 
-
-def slice_spectra(spectra, cutoff, parameters):
-    """
-    Slices spectra at cutoff which is in terms of omega0
-    :return: sliced_spectra, zeroindex, cutdex
-    """
-
-    ind = parameters.index('-sites')
-    spectrum_parameters = parameters[ind:] + '-cutoff{}omega0'.format(cutoff)
-
-    new_spectra = []
-    zeroindex = 0
-    cutdex = 0
-    for pair in spectra:
-        freqs, spect = pair
-        cutdex = np.argmax(freqs > cutoff)
-        spect = spect[:cutdex]
-        freqs = freqs[:cutdex]
-        # zeroindex = np.argmin(spect > 1e-20)
-        zeroindex = find_zero(spect, 1e-20)
-        spect = spect[zeroindex:]
-        freqs = freqs[zeroindex:]
-        new_spectra.append((freqs, spect))
-
-    new_spectra = np.array(new_spectra)
-    np.save('./Spectra/cutoffSpectra'+spectrum_parameters+'.npy', new_spectra)
-    return new_spectra, zeroindex, cutdex
-
-
-def find_zero(spectra, minimum):
-    """
-    Finds last occurrence less than minimum
-    :param spectra: spectra we want to cut
-    :param minimum: minimum value we will accept
-    :return: the last occurrence less than minimum, if there are none, returns np.inf
-    """
-    zeroindex = np.inf
-    for i in range(len(spectra)):
-        if spectra[i] < minimum:
-            zeroindex = i
-    return zeroindex
 
 target_U_over_t0 = 5
 target_a = 5
@@ -244,6 +214,23 @@ U_over_t0_min = 0
 U_over_t0_max = 10
 a_min = 0
 a_max = 10
+#
+# for pbounds in [(0,10,0,10),(0,1,0,2),(4,6,4,6),(7,9,7,9)]:
+#     print(pbounds)
+#     ti = time()
+#     U_over_t0_min, U_over_t0_max, a_min, a_max = pbounds
+#
+#     parameters = '-target_U{}t0-target_a{}-sites{}-U_min{}t0-U_max{}t0-{}a_min-{}a_max'.format(
+#                 target_x[0] / params.t, target_x[1], params.nx, U_over_t0_min, U_over_t0_max, a_min, a_max)
+#     if sym:
+#         parameters += '-withsymmetry'
+#     else:
+#         parameters += '-withoutsymmetry'
+#
+#     x_vals, bounds, U_vals, a_vals = get_data_points(params, U_over_t0_min, U_over_t0_max, a_min, a_max)
+#
+#     get_spectra(params, x_vals, parameters)
+#     print("time:", time() - ti)
 
 parameters = '-target_U{}t0-target_a{}-sites{}-U_min{}t0-U_max{}t0-{}a_min-{}a_max'.format(
             target_x[0] / params.t, target_x[1], params.nx, U_over_t0_min, U_over_t0_max, a_min, a_max)
@@ -254,14 +241,23 @@ else:
 
 x_vals, bounds, U_vals, a_vals = get_data_points(params, U_over_t0_min, U_over_t0_max, a_min, a_max)
 
-# spectra = get_spectra(params, x_vals, parameters)
+"""Load uncut spectra"""
+spectra_parameters = parameters[parameters.index('-sites'):]
+spectra = np.load('./Spectra/spectra' + spectra_parameters + '.npy')
 
-ind = parameters.index('-sites')
-spectra_parameters = parameters[ind:]
-spectra = np.load('./Spectra/spectra' + spectra_parameters+'.npy')
+"""Load cut spectra"""
+# min_cut = 2
+# max_cut = 30
+# spectra_parameters += "-cut{}to{}omega0".format(min_cut, max_cut)
+# new_spectra = np.load('./Spectra/cutoffSpectra' + spectra_parameters + '.npy')
+# cut_indices = np.load('./Spectra/CutIndices' + spectra_parameters + '.npy')
 
-# for 10 -> 30 by 5s
-for cutoff in range(10, 35, 5):
-    sliced_spectrum, zeroindex, cutdex = slice_spectra(spectra, cutoff, parameters)
-    costs = get_cost(params, target_x, x_vals, parameters, spectra=sliced_spectrum, zeroindex=zeroindex, cutdex=cutdex)
-    plot_cost(costs, parameters, params, target_x, U_vals, a_vals, parameters2='-cutoff{}omega0'.format(cutoff))
+"""This is code for when I don't have the cut spectra saved already"""
+min_cut = 3
+max_cut = 30
+parameters += "-cut{}to{}omega0".format(min_cut, max_cut)
+new_spectra, cut_indices = slice_spectra(spectra, parameters, min_cut, max_cut)
+
+"""Get cost and plot it"""
+costs = get_cost(params, target_x, new_spectra, cut_indices)
+plot_cost(costs, parameters, params, target_x, U_vals, a_vals)
