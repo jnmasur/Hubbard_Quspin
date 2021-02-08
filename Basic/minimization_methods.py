@@ -297,7 +297,7 @@ def minimize_wrapper(args):
     return minimize(fun, x0, args=(J_target, params), bounds=bounds, options={'ftol': 1e-10})
 
 
-def current_expectation(x, params):
+def current_expectation(x, params, return_time=False):
     U, a = x
 
     # contains all important variables
@@ -343,7 +343,10 @@ def current_expectation(x, params):
     # get the expectation value of J
     J_expec = expec.J_expec(psi_t, times, hop_left, hop_right, lat, cycles)
 
-    return J_expec
+    if return_time:
+        return J_expec, times
+    else:
+        return J_expec
 
 
 def current_expectation_power_spectrum(x, params):

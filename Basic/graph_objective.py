@@ -128,7 +128,7 @@ def get_cost(params, target_x, spectra, cut_indices):
     return costs
 
 
-def similarity_comparison(spectra):
+def similarity_comparison(spectra, parameters):
     with Pool(100) as pool:
         similarity = [
             list(pool.map(objective_w_spectrum, ((spec1, spec2) for _, spec1 in spectra))) for _, spec2 in spectra
@@ -136,7 +136,7 @@ def similarity_comparison(spectra):
     plt.imshow(similarity, origin=True)
     plt.colorbar()
     plt.show()
-    plt.savefig("./Cost/SimilarityComparison")
+    plt.savefig("./Cost/SimilarityComparison" + parameters)
     return np.array(similarity)
 
 
@@ -173,38 +173,96 @@ def plot_cost(costs, parameters, params, target_x, U_vals, a_vals, type='2d', ad
         plt.show()
 
 
-def plot_spectra(params, first_x, second_x, outfile):
+def plot_response(params, xs, domain):
     """
-    Plots two spectra on the same graph
+    Plots material response based on their Hubbard parameters.
+    :param xs: list (or iterable) of points from which we can calculate the response
+    :param domain: either "time" or "frequency", determines whether we plot in the spectra or actual response
     """
-    # the lat is for getting the pulse frequency so it does not depend on U
-    lat = hhg(params.field, params.nup, params.ndown, params.nx, 0, 0, params.t)
 
-    first_freqs, first_spectrum = current_expectation_power_spectrum(first_x, params)
-    second_freqs, second_spectrum = current_expectation_power_spectrum(second_x, params)
+    if domain == "time":
+        outfile = "./DirectComparisons/TimeDomainComparison"
+        for x in xs:
+            current, times = current_expectation(x, params, return_time=True)
+            plt.plot(times, current, label="$U = {} \cdot t_0, a = {}$".format(x[0] / params.t, x[1]),
+                     color=(np.random.random(), np.random.random(), np.random.random()))
+            outfile += "-({},{})".format(x[0], x[1])
+        plt.xlabel("Time")
+        plt.ylabel("Current Density Expectation")
+        plt.legend(loc="upper right")
+        plt.savefig(outfile + ".png")
+        plt.show()
+    elif domain == "frequency":
+        # the lat is for getting the pulse frequency so it does not depend on U
+        lat = hhg(params.field, params.nup, params.ndown, params.nx, 0, 0, params.t)
+        fig, ax = plt.subplots()
+        outfile = "./DirectComparisons/FrequencyDomainComparison"
+        for x in xs:
+            freqs, spect = current_expectation_power_spectrum(x, params)
+            ax.semilogy(freqs / lat.freq, spect, label="$U = {} \cdot t_0, a = {}$".format(x[0] / params.t, x[1]),
+                        color=(np.random.random(), np.random.random(), np.random.random()))
+            outfile += "-({},{})".format(x[0], x[1])
+        ax.set_xlabel("Harmonic Order")
+        ax.set_ylabel("Power")
+        # ax.set_xlim((0, 50))
+        for i in range(1, 100, 2):
+            ax.axvline(i, linestyle="dashed", color="grey")
+        ax.legend(loc="upper right")
+        plt.savefig(outfile + ".png")
+        plt.show()
+    else:
+        raise Exception("Invalid specifier for domain")
 
-    first_freqs, second_freqs = first_freqs / lat.freq, second_freqs / lat.freq
-    # first_spectrum /= first_spectrum.max()
-    # second_spectrum /= second_spectrum.max()
 
-    fig, ax = plt.subplots()
-    ax.semilogy(first_freqs, first_spectrum,
-                label="$U = {} \cdot t_0, a = {}$".format(first_x[0] / params.t, first_x[1]),
-                color="blue")
-    ax.semilogy(second_freqs, second_spectrum, label="$U = {} \cdot t_0, a = {}$".format(second_x[0] / params.t,
-                                                                                         second_x[1]), color="orange")
-    ax.set_xlabel("Harmonic Order")
-    ax.set_ylabel("Power")
-    # ax.set_xlim((0, 50))
-    for x in range(1, 50, 2):
-        ax.axvline(x, linestyle="dashed", color="grey")
-    ax.legend(loc="upper right")
-    plt.savefig(outfile)
-    plt.show()
+def compare_response(params, x1, x2, domain, normalized=False):
+    """
+    Compares the response of two materials
+    :param domain: either "time" or "frequency", determines whether we plot in the spectra or actual response
+    """
+
+    if domain == "time":
+        outfile = "./DirectComparisons/TimeDomainComparison-({},{})-({},{})".format(x1[0], x1[1], x2[0], x2[1])
+        current1, times = current_expectation(x1, params, return_time=True)
+        current2 = current_expectation(x2, params)
+        if normalized:
+            current1 /= current1.max()
+            current2 /= current2.max()
+        plt.plot(times, current1, label="$U = {} \cdot t_0, a = {}$".format(x1[0] / params.t, x1[1]), color="blue")
+        plt.plot(times, current2, label="$U = {} \cdot t_0, a = {}$".format(x2[0] / params.t, x2[1]), color="red",
+                 linestyle="dashed")
+        plt.xlabel("Time")
+        plt.ylabel("Current Density Expectation")
+        plt.legend(loc="upper right")
+        plt.savefig(outfile + ".png")
+        plt.show()
+    elif domain == "frequency":
+        # the lat is for getting the pulse frequency so it does not depend on U
+        lat = hhg(params.field, params.nup, params.ndown, params.nx, 0, 0, params.t)
+        fig, ax = plt.subplots()
+        outfile = "./DirectComparisons/FrequencyDomainComparison-({},{})-({},{})".format(x1[0], x1[1], x2[0], x2[1])
+        freqs, spect1 = current_expectation_power_spectrum(x1, params)
+        freqs, spect2 = current_expectation_power_spectrum(x2, params)
+        if normalized:
+            spect1 /= spect1.max()
+            spect2 /= spect2.max()
+        ax.semilogy(freqs / lat.freq, spect1, label="$U = {} \cdot t_0, a = {}$".format(x1[0] / params.t, x1[1]),
+                    color="blue")
+        ax.semilogy(freqs / lat.freq, spect2, label="$U = {} \cdot t_0, a = {}$".format(x2[0] / params.t, x2[1]),
+                    color="red", linestyle="dashed")
+        ax.set_xlabel("Harmonic Order")
+        ax.set_ylabel("Power")
+        # ax.set_xlim((0, 50))
+        for i in range(1, 100, 2):
+            ax.axvline(i, linestyle="dashed", color="grey")
+        ax.legend(loc="upper right")
+        plt.savefig(outfile + ".png")
+        plt.show()
+    else:
+        raise Exception("Invalid specifier for domain")
 
 
-target_U_over_t0 = 5
-target_a = 5
+target_U_over_t0 = 0
+target_a = 4
 sites = 6
 sym = True
 
@@ -233,7 +291,7 @@ a_max = 10
 #     print("time:", time() - ti)
 
 parameters = '-target_U{}t0-target_a{}-sites{}-U_min{}t0-U_max{}t0-{}a_min-{}a_max'.format(
-            target_x[0] / params.t, target_x[1], params.nx, U_over_t0_min, U_over_t0_max, a_min, a_max)
+    target_x[0] / params.t, target_x[1], params.nx, U_over_t0_min, U_over_t0_max, a_min, a_max)
 if sym:
     parameters += '-withsymmetry'
 else:
@@ -253,11 +311,15 @@ spectra = np.load('./Spectra/spectra' + spectra_parameters + '.npy')
 # cut_indices = np.load('./Spectra/CutIndices' + spectra_parameters + '.npy')
 
 """This is code for when I don't have the cut spectra saved already"""
-min_cut = 3
-max_cut = 30
-parameters += "-cut{}to{}omega0".format(min_cut, max_cut)
-new_spectra, cut_indices = slice_spectra(spectra, parameters, min_cut, max_cut)
+# min_cut = 3
+# max_cut = 30
+# parameters += "-cut{}to{}omega0".format(min_cut, max_cut)
+# new_spectra, cut_indices = slice_spectra(spectra, parameters, min_cut, max_cut)
 
 """Get cost and plot it"""
-costs = get_cost(params, target_x, new_spectra, cut_indices)
-plot_cost(costs, parameters, params, target_x, U_vals, a_vals)
+# costs = get_cost(params, target_x, new_spectra, cut_indices)
+# plot_cost(costs, parameters, params, target_x, U_vals, a_vals)
+
+# similarity_comparison(spectra, spectra_parameters)
+# plot_response(params, [np.array([5*params.t, 5]), np.array([3*params.t, 4]), np.array([7*params.t, 8])], "frequency")
+# compare_response(params, np.array([5*params.t, 5]), np.array([4*params.t, 9]), "time", normalized=True)
