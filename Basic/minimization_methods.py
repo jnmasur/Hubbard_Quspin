@@ -147,6 +147,13 @@ def objective_w_spectrum(target_and_res):
         return np.nan
 
 
+def time_domain_objective(both):
+    current1, current2 = both
+    current1 /= current1.max()
+    current2 /= current2.max()
+    return np.trapz((current1 - current2)**2)
+
+
 def get_seeds(size):
     """
     Generate unique random seeds for seeding them into random number generators in multiprocessing simulations

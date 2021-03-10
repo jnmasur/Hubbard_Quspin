@@ -72,8 +72,6 @@ def get_spectra(params, x_vals, parameters):
     # the lat is for getting the pulse frequency so it does not depend on U
     lat = hhg(params.field, params.nup, params.ndown, params.nx, 0, 0, params.t)
     data_points = ((np.array(point), params) for point in x_vals)
-    ind = parameters.index('-sites')
-    spectrum_parameters = parameters[ind:]
 
     if __name__ == "__main__":
         # this saves the spectra for processing
@@ -90,9 +88,24 @@ def get_spectra(params, x_vals, parameters):
             scaled_results.append((freqs, spect))
         scaled_results = np.array(scaled_results)
         print(scaled_results.shape)
-        np.save("./Spectra/spectra" + spectrum_parameters + ".npy", scaled_results)
+        np.save("./Spectra/spectra" + parameters + ".npy", scaled_results)
 
         return scaled_results
+
+
+def get_current_expecs(params, x_vals, parameters):
+    """
+    Saves and returns the current expectations over a grid of points
+    """
+    data_points = ((np.array(point), params) for point in x_vals)
+
+    if __name__ == "__main__":
+        with Pool(100) as pool:
+            results = pool.starmap(current_expectation, data_points)
+        results = np.array(results)
+
+        np.save("./CurrentExpectations/CurrentExpectations" + parameters + ".npy", results)
+        return results
 
 
 def slice_spectra(spectra, parameters, min_cut, max_cut):
@@ -129,14 +142,21 @@ def get_cost(params, target_x, spectra, cut_indices):
 
 
 def similarity_comparison(spectra, parameters):
+    spectra = spectra[::100]
     with Pool(100) as pool:
+        # similarity = [
+        #     list(pool.map(objective_w_spectrum, ((spec1, spec2) for _, spec1 in spectra))) for _, spec2 in spectra
+        # ]
         similarity = [
-            list(pool.map(objective_w_spectrum, ((spec1, spec2) for _, spec1 in spectra))) for _, spec2 in spectra
+            list(pool.map(objective_w_spectrum, ((spec2, spec1) for _, spec1 in spectra))) for _, spec2 in spectra
         ]
-    plt.imshow(similarity, origin=True)
-    plt.colorbar()
-    plt.show()
-    plt.savefig("./Cost/SimilarityComparison" + parameters)
+    similarity = np.array(similarity)
+    np.save("./CostData/SimilarityData2", similarity)
+
+    # plt.imshow(similarity, origin=True)
+    # plt.colorbar()
+    # plt.show()
+    # plt.savefig("./Cost/SimilarityComparison" + parameters)
     return np.array(similarity)
 
 
@@ -270,28 +290,10 @@ target_x, params = set_up(target_U_over_t0, target_a, sym, sites)
 
 U_over_t0_min = 0
 U_over_t0_max = 10
-a_min = 0
+a_min = 1
 a_max = 10
-#
-# for pbounds in [(0,10,0,10),(0,1,0,2),(4,6,4,6),(7,9,7,9)]:
-#     print(pbounds)
-#     ti = time()
-#     U_over_t0_min, U_over_t0_max, a_min, a_max = pbounds
-#
-#     parameters = '-target_U{}t0-target_a{}-sites{}-U_min{}t0-U_max{}t0-{}a_min-{}a_max'.format(
-#                 target_x[0] / params.t, target_x[1], params.nx, U_over_t0_min, U_over_t0_max, a_min, a_max)
-#     if sym:
-#         parameters += '-withsymmetry'
-#     else:
-#         parameters += '-withoutsymmetry'
-#
-#     x_vals, bounds, U_vals, a_vals = get_data_points(params, U_over_t0_min, U_over_t0_max, a_min, a_max)
-#
-#     get_spectra(params, x_vals, parameters)
-#     print("time:", time() - ti)
 
-parameters = '-target_U{}t0-target_a{}-sites{}-U_min{}t0-U_max{}t0-{}a_min-{}a_max'.format(
-    target_x[0] / params.t, target_x[1], params.nx, U_over_t0_min, U_over_t0_max, a_min, a_max)
+parameters = '-sites{}-U_min{}t0-U_max{}t0-{}a_min-{}a_max'.format(params.nx, U_over_t0_min, U_over_t0_max, a_min, a_max)
 if sym:
     parameters += '-withsymmetry'
 else:
@@ -300,26 +302,12 @@ else:
 x_vals, bounds, U_vals, a_vals = get_data_points(params, U_over_t0_min, U_over_t0_max, a_min, a_max)
 
 """Load uncut spectra"""
-spectra_parameters = parameters[parameters.index('-sites'):]
-spectra = np.load('./Spectra/spectra' + spectra_parameters + '.npy')
-
-"""Load cut spectra"""
-# min_cut = 2
-# max_cut = 30
-# spectra_parameters += "-cut{}to{}omega0".format(min_cut, max_cut)
-# new_spectra = np.load('./Spectra/cutoffSpectra' + spectra_parameters + '.npy')
-# cut_indices = np.load('./Spectra/CutIndices' + spectra_parameters + '.npy')
-
-"""This is code for when I don't have the cut spectra saved already"""
-# min_cut = 3
-# max_cut = 30
-# parameters += "-cut{}to{}omega0".format(min_cut, max_cut)
-# new_spectra, cut_indices = slice_spectra(spectra, parameters, min_cut, max_cut)
+spectra = np.load('./Spectra/spectra' + parameters + '.npy')
 
 """Get cost and plot it"""
 # costs = get_cost(params, target_x, new_spectra, cut_indices)
 # plot_cost(costs, parameters, params, target_x, U_vals, a_vals)
 
-# similarity_comparison(spectra, spectra_parameters)
+similarity_comparison(spectra, parameters)
 # plot_response(params, [np.array([5*params.t, 5]), np.array([3*params.t, 4]), np.array([7*params.t, 8])], "frequency")
 # compare_response(params, np.array([5*params.t, 5]), np.array([4*params.t, 9]), "time", normalized=True)
