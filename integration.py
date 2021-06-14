@@ -23,6 +23,7 @@ cycles = 10
 n_steps = 2000
 start = 0
 stop = cycles / lat.freq
+stop += 0
 
 a_values = np.linspace(1, 10, num=100)
 omega_1_real_values = []
