@@ -14,7 +14,7 @@ def spectrum(current, delta):
     """
     Gets power spectrum of the current
     :param current: the induced current in the lattice
-    :param delta: timestep between current points
+    :param delta: time step between current points
     :return: the power spectrum of the current
     """
     at = np.gradient(current, delta)
@@ -30,7 +30,7 @@ def spectrum_welch(at, delta):
 
 # note U and a are the optimization parameters, so they are not contained in this class
 class Parameters:
-    def __init__(self, nx, nup, ndown, t0, field, F0, pbc):
+    def __init__(self, nx, nup, ndown, t0, field, F0, pbc, cycles):
         self.nx = nx
         self.nup = nup
         self.ndown = ndown
@@ -39,6 +39,7 @@ class Parameters:
         self.field = field
         self.F0 = F0
         self.basis = None
+        self.cycles = cycles
 
     def set_basis(self, symmetry=True):
         """
@@ -75,7 +76,7 @@ def objective(x, J_target, params, graph=False, fname=None):
               F0=params.F0, a=oa, pbc=params.pbc)
 
     # gets times to evaluate at
-    cycles = 10
+    cycles = params.cycles
     n_steps = 2000
     start = 0
     stop = cycles / lat.freq
@@ -321,6 +322,11 @@ def minimize_wrapper(args):
 
 
 def current_expectation(x, params, return_time=False):
+    """
+    :param x: U * t_0, a
+    :param params: all parameters
+    :return: current expectation
+    """
     U, a = x
 
     # contains all important variables
@@ -328,7 +334,7 @@ def current_expectation(x, params, return_time=False):
               F0=params.F0, a=a, pbc=params.pbc)
 
     # gets times to evaluate at
-    cycles = 10
+    cycles = params.cycles
     n_steps = 2000
     start = 0
     stop = cycles / lat.freq
@@ -375,7 +381,7 @@ def current_expectation(x, params, return_time=False):
 def current_expectation_power_spectrum(x, params, return_freqs=False):
     """
     Returns the power spectrum of a current based on the parameters and x
-    :param x: U, a
+    :param x: U * t_0, a
     :param params: all parameters
     :return: power spectrum of J
     """
@@ -384,7 +390,7 @@ def current_expectation_power_spectrum(x, params, return_freqs=False):
     lat = hhg(field=params.field, nup=params.nup, ndown=params.ndown, nx=params.nx, ny=0, U=U, t=params.t,
               F0=params.F0, a=a, pbc=params.pbc)
 
-    cycles = 10
+    cycles = params.cycles
     n_steps = 2000
     start = 0
     stop = cycles / lat.freq
